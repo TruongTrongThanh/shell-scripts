@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { createBashTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { Text } from "@earendil-works/pi-tui";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -108,6 +109,13 @@ function discoverAndRegisterScripts(
 			description,
 			promptSnippet: `Run the ${name} script`,
 			parameters: SCRIPT_PARAMS,
+			renderCall: (params, theme) => {
+				const prefix = theme.fg("toolTitle", theme.bold(label + " "));
+				if (params.args) {
+					return new Text(prefix + theme.fg("accent", params.args), 0, 0);
+				}
+				return new Text(prefix + theme.fg("dim", "(no arguments)"), 0, 0);
+			},
 			execute: async (toolCallId, params, signal, onUpdate, execCtx) => {
 				// Verify script still exists
 				if (!fs.existsSync(filePath)) {
