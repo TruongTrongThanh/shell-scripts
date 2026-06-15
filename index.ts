@@ -9,6 +9,7 @@ import path from "node:path";
 
 const BASH_DIR_NAME = ".pi/bash";
 const VALID_NAME_RE = /^[a-z0-9_-]+$/;
+const TOOL_PREFIX = "bash_";
 const DEFAULT_TIMEOUT = 120;
 const MAX_DESC_LINES = 10;
 
@@ -57,8 +58,12 @@ function extractTimeout(filePath: string): number {
 
 function camelCaseLabel(filename: string): string {
 	const name = path.basename(filename, ".sh");
+	// Strip the bash_ prefix before capitalizing
+	const stripped = name.startsWith(TOOL_PREFIX)
+		? name.slice(TOOL_PREFIX.length)
+		: name;
 	// Split on underscores, dashes, or spaces; capitalize each part
-	return name
+	return "Run" + stripped
 		.split(/[-_\s]+/)
 		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
 		.join("");
@@ -70,11 +75,11 @@ function discoverAndRegisterScripts(
 	pi: ExtensionAPI,
 	ctx: ExtensionContext,
 	toolNames: Set<string>,
-): number {
+): { count: number; names: string[] } {
 	const bashDir = path.join(ctx.cwd, BASH_DIR_NAME);
 
 	if (!fs.existsSync(bashDir)) {
-		return 0;
+		return { count: 0, names: [] };
 	}
 
 	const entries = fs.readdirSync(bashDir, { withFileTypes: true });
@@ -85,20 +90,23 @@ function discoverAndRegisterScripts(
 		if (!entry.name.endsWith(".sh")) continue;
 		if (entry.name.startsWith(".")) continue;
 
-		const name = entry.name.slice(0, -3); // strip .sh
-		if (!VALID_NAME_RE.test(name)) continue;
+		const baseName = entry.name.slice(0, -3); // strip .sh
+		if (!VALID_NAME_RE.test(baseName)) continue;
 
+		const name = TOOL_PREFIX + baseName;
 		const filePath = path.join(bashDir, entry.name);
 		const timeout = extractTimeout(filePath);
 		scripts.push({ name, filePath, timeout });
 	}
 
 	let count = 0;
+	const names: string[] = [];
 
 	// Register each script as a tool
 	for (const { name, filePath, timeout } of scripts) {
 		toolNames.add(name);
 		count++;
+		names.push(name);
 
 		const description = extractDescription(filePath);
 		const label = camelCaseLabel(filePath);
@@ -147,7 +155,7 @@ function discoverAndRegisterScripts(
 		});
 	}
 
-	return count;
+	return { count, names };
 }
 
 // ── Extension Factory ─────────────────────────────────────────────────────────
@@ -165,9 +173,12 @@ export default function shellScriptsExtension(pi: ExtensionAPI) {
 			registeredToolNames.clear();
 		}
 
-		const count = discoverAndRegisterScripts(pi, ctx, registeredToolNames);
+		const { count, names } = discoverAndRegisterScripts(pi, ctx, registeredToolNames);
 		if (count > 0) {
-			ctx.ui.notify(`Registered ${count} script tool(s) from .pi/bash/`, "info");
+			ctx.ui.notify(
+				`Registered ${count} script tool(s) from .pi/bash/: ${names.join(", ")}`,
+				"info",
+			);
 		}
 	});
 
@@ -184,9 +195,12 @@ export default function shellScriptsExtension(pi: ExtensionAPI) {
 		description: "Re-scan .pi/bash/ and (re)register all script tools",
 		handler: async (_args, ctx) => {
 			registeredToolNames.clear();
-			const count = discoverAndRegisterScripts(pi, ctx, registeredToolNames);
+			const { count, names } = discoverAndRegisterScripts(pi, ctx, registeredToolNames);
 			if (count > 0) {
-				ctx.ui.notify(`Script tools refreshed (${count} registered)`, "info");
+				ctx.ui.notify(
+					`Script tools refreshed (${count} registered): ${names.join(", ")}`,
+					"info",
+				);
 			} else {
 				ctx.ui.notify("No scripts found in .pi/bash/", "info");
 			}

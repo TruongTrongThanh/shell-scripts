@@ -66,7 +66,7 @@ python3 --version
 
 ### 2) Start Pi
 
-On session start, the extension auto-registers script tools.
+On session start, the extension auto-registers script tools and shows a startup notification listing the tool names it registered.
 
 ### 3) Reload after changes
 
